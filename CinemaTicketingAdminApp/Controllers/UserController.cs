@@ -1,0 +1,70 @@
+﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using CinemaTicketingAdminApp.Models;
+using System.Text;
+using ExcelDataReader;
+using System.Net.Http;
+using Newtonsoft.Json;
+
+namespace CinemaTicketingAdminApp.Controllers
+{
+    public class UserController : Controller
+    {
+        public IActionResult Index()
+        {
+            return View();
+        }
+
+        public IActionResult ImportUsers(IFormFile file)
+        {
+            string pathToUpload = $"{Directory.GetCurrentDirectory()}\\Files\\{file.FileName}";
+            using(FileStream fileStream = System.IO.File.Create(pathToUpload))
+            {
+                file.CopyTo(fileStream);
+                fileStream.Flush();
+                fileStream.Close();
+            }
+
+            List<User> users = getAllUsersFromFile(file.FileName);
+            HttpClient client = new HttpClient();
+
+            string URL = "https://localhost:44302/api/Admin/ImportAllUsers";
+            
+            HttpContent content = new StringContent(JsonConvert.SerializeObject(users), Encoding.UTF8, "application/json");
+            HttpResponseMessage response = client.PostAsync(URL, content).Result;
+
+            var result = response.Content.ReadAsAsync<Order>().Result;
+
+            return RedirectToAction("Index", "Order");
+        }
+
+        private List<User> getAllUsersFromFile(string fileName)
+        {
+            List<User> users = new List<User>();
+
+            string filePath = $"{Directory.GetCurrentDirectory()}\\Files\\{fileName}";
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            using (var stream = System.IO.File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                using(var reader = ExcelReaderFactory.CreateReader(stream))
+                {
+                    while (reader.Read())
+                    {
+                        users.Add(new Models.User
+                        {
+                            Email = reader.GetValue(0).ToString(),
+                            Password = reader.GetValue(1).ToString(),
+                            ConfirmPassword = reader.GetValue(2).ToString()
+                        });
+                    }
+                }
+            }
+            return null;
+        }
+    }
+}
